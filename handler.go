@@ -17,6 +17,8 @@ func (server *ChatServer) Handle(ctx echo.Context) error {
 	var uid, roomID int
 	var err error
 	var wsConn *websocket.Conn
+	var room *Room
+	var msg []byte
 
 	wsConn, err = upgrader.Upgrade(ctx.Response(), ctx.Request(), nil)
 	if err != nil {
@@ -33,14 +35,26 @@ func (server *ChatServer) Handle(ctx echo.Context) error {
 		return err
 	}
 
-	sess := NewSession(uid, wsConn)
-	defer sess.Close()
-
-	server.AddToRoom(roomID, sess)
+	// Session 对象可以放入Pool中重用
+	// TODO 这里的 MsgChan 是关闭的，closed属性是false，需要修正
+	sess := server.SessPool.Get().(*Session)
+	sess.UID = uid
+	sess.RoomID = roomID
+	sess.Conn = wsConn
+	//sess := NewSession(uid, roomID, wsConn)
+	//defer sess.Close()
+	room = server.CreateRoom(roomID)
+	room.AddUser(uid, sess)
+	//defer room.RemoveUser(uid)
+	defer func() {
+		sess.Close()
+		room.RemoveUser(uid)
+		server.SessPool.Put(sess)
+	}()
 
 	for {
 		// read message
-		_, msg, err := sess.ReadMessage()
+		_, msg, err = sess.Conn.ReadMessage()
 		if err != nil {
 			if !websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
 				glog.Error(err)
@@ -49,11 +63,11 @@ func (server *ChatServer) Handle(ctx echo.Context) error {
 		}
 		glog.Infof("msg:%s", string(msg))
 
-		// send back for test
-		sess.SendMessage(msg)
-
 		// broadcast message
-
+		err = room.Broadcast(msg)
+		if err != nil {
+			glog.Error(err)
+		}
 	}
 
 	return nil

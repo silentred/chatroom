@@ -7,24 +7,22 @@ import (
 
 type Session struct {
 	UID     int
+	RoomID  int
 	Conn    *websocket.Conn
 	MsgChan chan []byte
 	closed  bool
 }
 
-func NewSession(uid int, conn *websocket.Conn) *Session {
+func NewSession(uid, roomID int, conn *websocket.Conn) *Session {
 	sess := &Session{
 		UID:     uid,
+		RoomID:  roomID,
 		Conn:    conn,
 		MsgChan: make(chan []byte, 100),
 		closed:  false,
 	}
 	sess.Start()
 	return sess
-}
-
-func (sess *Session) ReadMessage() (int, []byte, error) {
-	return sess.Conn.ReadMessage()
 }
 
 func (sess *Session) SendMessage(msg []byte) {
@@ -35,19 +33,24 @@ func (sess *Session) SendMessage(msg []byte) {
 
 func (sess *Session) goSendMessage() {
 	var err error
-	for msg := range sess.MsgChan {
+	var msg []byte
+	for msg = range sess.MsgChan {
 		err = sess.Conn.WriteMessage(websocket.TextMessage, msg)
 		if err != nil {
 			glog.Errorf("write msg error: %s", err)
-			sess.Close()
+			//sess.Close()
+			break
 		}
 	}
 	glog.Infof("try to stop sending msg for uid:%d", sess.UID)
 }
 
 func (sess *Session) Close() error {
-	close(sess.MsgChan)
+	glog.Infof("closing uid:%d", sess.UID)
+
 	sess.closed = true
+	close(sess.MsgChan)
+
 	return sess.Conn.Close()
 }
 
