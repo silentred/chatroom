@@ -36,13 +36,13 @@ func (server *ChatServer) Handle(ctx echo.Context) error {
 	}
 
 	// Session 对象可以放入Pool中重用
-	// TODO 这里的 MsgChan 是关闭的，closed属性是false，需要修正
 	sess := server.SessPool.Get().(*Session)
 	sess.UID = uid
 	sess.RoomID = roomID
 	sess.Conn = wsConn
-	//sess := NewSession(uid, roomID, wsConn)
-	//defer sess.Close()
+	sess.closed = false
+	go sess.Run()
+
 	room = server.CreateRoom(roomID)
 	room.AddUser(uid, sess)
 	//defer room.RemoveUser(uid)

@@ -11,6 +11,7 @@ type Session struct {
 	Conn    *websocket.Conn
 	MsgChan chan []byte
 	closed  bool
+	quit    chan struct{}
 }
 
 func NewSession(uid, roomID int, conn *websocket.Conn) *Session {
@@ -20,8 +21,8 @@ func NewSession(uid, roomID int, conn *websocket.Conn) *Session {
 		Conn:    conn,
 		MsgChan: make(chan []byte, 100),
 		closed:  false,
+		quit:    make(chan struct{}, 1),
 	}
-	sess.Start()
 	return sess
 }
 
@@ -34,14 +35,21 @@ func (sess *Session) SendMessage(msg []byte) {
 func (sess *Session) goSendMessage() {
 	var err error
 	var msg []byte
-	for msg = range sess.MsgChan {
-		err = sess.Conn.WriteMessage(websocket.TextMessage, msg)
-		if err != nil {
-			glog.Errorf("write msg error: %s", err)
-			//sess.Close()
-			break
+
+FOR_LOOP:
+	for {
+		select {
+		case msg = <-sess.MsgChan:
+			err = sess.Conn.WriteMessage(websocket.TextMessage, msg)
+			if err != nil {
+				glog.Errorf("write msg error: %s", err)
+				break FOR_LOOP
+			}
+		case <-sess.quit:
+			break FOR_LOOP
 		}
 	}
+
 	glog.Infof("try to stop sending msg for uid:%d", sess.UID)
 }
 
@@ -49,11 +57,11 @@ func (sess *Session) Close() error {
 	glog.Infof("closing uid:%d", sess.UID)
 
 	sess.closed = true
-	close(sess.MsgChan)
+	sess.quit <- struct{}{}
 
 	return sess.Conn.Close()
 }
 
-func (sess *Session) Start() {
+func (sess *Session) Run() {
 	go sess.goSendMessage()
 }
