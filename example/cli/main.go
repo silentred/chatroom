@@ -15,6 +15,7 @@ import (
 )
 
 var (
+	addr      string
 	send      bool
 	msg       string
 	uid       int
@@ -26,6 +27,7 @@ var (
 func init() {
 	flag.BoolVar(&send, "send", false, "SEND: bool")
 	flag.StringVar(&msg, "msg", "test", "SEND: msg content")
+	flag.StringVar(&addr, "addr", "localhost:1300", "BOTH: websocket address")
 	flag.IntVar(&times, "times", 1, "SEND: write times")
 	flag.IntVar(&uid, "uid", 1, "uid")
 	flag.IntVar(&roomID, "room", 1, "roomID")
@@ -50,7 +52,7 @@ func main() {
 }
 
 func newConn(uid, roomID int) *websocket.Conn {
-	u, err := url.Parse(fmt.Sprintf("ws://localhost:1300/chatroom?uid=%d&room_id=%d", uid, roomID))
+	u, err := url.Parse(fmt.Sprintf("ws://%s/chatroom?uid=%d&room_id=%d", addr, uid, roomID))
 	if err != nil {
 		log.Println(err)
 	}
@@ -61,7 +63,7 @@ func newConn(uid, roomID int) *websocket.Conn {
 	}
 
 	wsHeaders := http.Header{
-		"Origin": {"http://localhost:1300"},
+		"Origin": {fmt.Sprintf("http://%s", addr)},
 	}
 
 	wsConn, resp, err := websocket.NewClient(rawConn, u, wsHeaders, 1024, 1024)
